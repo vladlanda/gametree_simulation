@@ -412,6 +412,7 @@ _PLAYER_JS = r"""
     ctx.restore();
   }
   let k = 0, playing = D.autoplay && N > 0, acc = 0, last = null, treeK = -1, treeKey = "";
+  let Z = 1, zNow = 1;                       // tree zoom: a factor, or null = fit the panel's width
   function draw(now) {
     const A = D.F[k];
     board(g, 0, 0, C, A.p, A.s, i => A.d[i] === "1", i => A.c[i] === "1",
@@ -430,16 +431,19 @@ _PLAYER_JS = r"""
       "score " + A.sc + (A.st !== "playing" ? "  ·  " + A.st : "");
     if (N) { $("s").value = k; $("p").textContent = playing ? "⏸" : "▶"; }
     if (D.T) {
-      const key = $("l").value + "," + $("bd").checked;
-      if ($("t").checked) { if (treeK !== k || treeKey !== key) drawTree(); }
-      else if (treeK !== k) $("h").textContent = treeK < 0 ? "Tick the box to draw the search tree." :
-        "⏸ Tree frozen at move " + treeK + ". Tick the box to follow the game again.";
+      const key = $("l").value + "," + $("bd").checked + "," + Z;
+      if ($("t").checked) { if (treeK !== k || treeKey !== key) drawTree(k); }
+      else {                                  // frozen: zoom/levels still redraw the frozen tree
+        if (treeK >= 0 && treeKey !== key) drawTree(treeK);
+        if (treeK !== k) $("h").textContent = treeK < 0 ? "Tick the box to draw the search tree." :
+          "⏸ Tree frozen at move " + treeK + ". Tick the box to follow the game again.";
+      }
     }
   }
-  function drawTree() {                      // the player's tree for this round; green = moves actually made
+  function drawTree(k) {                     // the player's tree for move k's round; green = moves actually made
     const r = Math.floor(k / n), j = k % n, T = D.T[r], tc = $("T"), tg = tc.getContext("2d");
     const L0 = +$("l").value, boards = $("bd").checked;
-    treeK = k; treeKey = L0 + "," + boards;
+    treeK = k; treeKey = L0 + "," + boards + "," + Z;
     if (!T) { tc.width = 400; tc.height = 50; tg.fillStyle = "#0f172a"; tg.fillRect(0, 0, 400, 50);
       text(tg, "Game over: no search here.", 10, 25, "#94a3b8", FS, "left"); $("h").textContent = ""; return; }
     const path = [T]; let off = "";
@@ -467,7 +471,10 @@ _PLAYER_JS = r"""
     const nw = boards ? bw + 12 : 78 * S, nh = boards ? bh + 12 + FS + 10 : 44 * S;
     const GX = nw + 22 * S, GY = nh + 56 * S, LW = 130 * S;
     const W = LW + leaves * GX + 20, H = 24 + L * GY + nh + 24;
-    tc.width = W; tc.height = H;
+    const sb = tc.parentElement, cw = sb.clientWidth;   // zoom: draw scaled, so text stays sharp
+    const z = zNow = Z !== null ? Z : cw > 50 ? Math.min(2, (cw - 2) / W) : 1;
+    tc.width = Math.round(W * z); tc.height = Math.round(H * z); tg.setTransform(z, 0, 0, z, 0, 0);
+    $("zl").textContent = Math.round(z * 100) + "%";
     const X = nd => LW + (nd._x + .5) * GX, Y = nd => 16 + nd._d * GY + nh / 2;
     tg.fillStyle = "#0f172a"; tg.fillRect(0, 0, W, H);
     for (let d = 0; d <= L; d++) { const who = d % n;
@@ -512,8 +519,7 @@ _PLAYER_JS = r"""
       if (!nd._k && nd.c && nd.c.length) text(tg, "⋯", x, y + nh / 2 + 12 * S, "#94a3b8", FS);
       if (nd._k) nd._k.forEach(c => nodes(c, pos, sc, seen));
     })(T, F0.p, F0.s, [F0.p[0][0] + "," + F0.p[0][1]]);
-    const sb = tc.parentElement;            // keep the current node in view (the panel only scrolls sideways)
-    sb.scrollLeft = Math.max(0, X(cur) - sb.clientWidth / 2);
+    sb.scrollLeft = Math.max(0, X(cur) * z - cw / 2);   // keep the current node in view (sideways scroll only)
     fit();
     const ch = T.c.find(c => c.x);
     $("h").textContent = "Round " + r + ": the player searched this tree" +
@@ -551,7 +557,18 @@ _PLAYER_JS = r"""
   requestAnimationFrame(loop);
   setTimeout(fit, 50);
   // when the frame becomes visible or changes size: redraw the tree (re-centres it) and refit the frame
-  try { new ResizeObserver(() => { treeK = -1; fit(); }).observe($("r")); } catch (e) {}
+  if (D.T) {
+    $("zo").onclick = () => { Z = Math.max(.1, (Z ?? zNow) / 1.25); };
+    $("zi").onclick = () => { Z = Math.min(4, (Z ?? zNow) * 1.25); };
+    $("zf").onclick = () => { Z = null; };
+    $("z1").onclick = () => { Z = 1; };
+    const tc = $("tc");   // ⛶: tree in full screen; where that is blocked, tree under the board at full width
+    const wide = () => { tc.style.flexBasis = tc.style.flexBasis === "100%" ? "420px" : "100%"; Z = null; };
+    $("fs").onclick = () => document.fullscreenElement ? document.exitFullscreen() :
+      (document.fullscreenEnabled ? tc.requestFullscreen() : Promise.reject()).then(() => { Z = null; }, wide);
+    document.addEventListener("fullscreenchange", () => { treeKey = ""; });
+  }
+  try { new ResizeObserver(() => { treeKey = ""; fit(); }).observe($("r")); } catch (e) {}
 })();
 """
 
@@ -605,11 +622,16 @@ def html_player(frames, title="", speed=8, autoplay=False, trees=None, ghost_mod
     plies = max((_plies(t) for t in trees), default=1) if trees else 0
     lv = min(tree_levels or n, plies)
     tree_col = "" if not trees else f"""
-<div style="flex:1 1 420px;min-width:320px;max-width:100%">
+<style>#{uid}tc:fullscreen{{overflow:auto;padding:12px;background:#0b1020}}</style>
+<div id="{uid}tc" style="flex:1 1 420px;min-width:320px;max-width:100%">
  <div {row} style="margin-top:0">
   <label style="cursor:pointer"><input id="{uid}t" type="checkbox" checked> Show search tree</label>
   <span>levels <select id="{uid}l" {btn}>{"".join(f'<option{" selected" if v == lv else ""}>{v}</option>' for v in range(1, plies + 1))}</select></span>
   <label style="cursor:pointer"><input id="{uid}bd" type="checkbox" {"checked" if boards else ""}> boards in nodes</label>
+  <span>zoom <button id="{uid}zo" {btn} title="zoom out">−</button> <span id="{uid}zl">100%</span>
+   <button id="{uid}zi" {btn} title="zoom in">+</button> <button id="{uid}zf" {btn} title="whole tree in the panel's width">fit</button>
+   <button id="{uid}z1" {btn} title="actual size">1:1</button>
+   <button id="{uid}fs" {btn} title="tree in full screen (Esc to leave), or under the board at full width">⛶</button></span>
  </div>
  <div id="{uid}h" style="font-size:{font}px;font-weight:600;color:#cbd5e1;margin:8px 0 6px"></div>
  <div style="overflow-x:auto;overflow-y:hidden;border-radius:8px;background:#0f172a"><canvas id="{uid}T" width="400" height="50"></canvas></div>

@@ -3,7 +3,7 @@
 Streamlit app for lesson 5 (adversarial search): minimax and alpha-beta on the lecture trees,
 and a maze-chase game (player vs. ghosts, with power pellets) played by a depth-limited search agent.
 Games are shown by a live HTML/JS player (`html_player` in the engine), the same one the Colab exercise uses.
-The game starts on ▶ and moves one agent per step, cell to cell on a semi-transparent grid, in turn order (A, ghost 1, ghost 2; an orange ring marks who just moved). In the app the player's **search tree** is drawn beside the board: every node shows its board (cropped to where the agents are) and its value, blue frame = A (MAX), red = ghost (MIN), green = moves actually made, ✂ = pruned. Record up to 9 levels; untick *Show search tree* to freeze it.
+The game starts on ▶ and moves one agent per step, cell to cell on a semi-transparent grid, in turn order (A, ghost 1, ghost 2; an orange ring marks who just moved). In the app the player's **search tree** is drawn beside the board: every node shows its board (cropped to where the agents are) and its value, blue frame = A (MAX), red = ghost (MIN), green = moves actually made, ✂ = pruned. Record up to 9 levels; untick *Show search tree* to freeze it. Zoom with − / + / *fit* (whole tree in the panel) / *1:1*; ⛶ shows the tree in full screen, or under the board at full width where full screen is blocked.
 
 `maze_game.py` is the engine (standard library only). The Colab exercise HM_05 uses the same code.
 Self-check: `python3 maze_game.py`.
